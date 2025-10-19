@@ -10,6 +10,7 @@
     const CONFIG = {
         riskLevel: 'low', // low, medium, high
         enableWebSocketMonitor: true,
+        enableBackgroundKeepAlive: true, // 后台保活模式
         activityInterval: 300000, // 5分钟
         debugMode: false
     };
@@ -145,21 +146,29 @@
 
         // 模拟自然用户活动
         simulateNaturalActivity() {
-            if (this.config.riskLevel === 'low') {
-                this.simulateScroll();
-            } else {
-                const activities = [
-                    () => this.simulateScroll(),
-                    () => this.simulateMouseMove(),
-                    () => this.simulateFocus()
-                ];
+            const isPageVisible = !document.hidden;
 
-                const randomActivity = activities[Math.floor(Math.random() * activities.length)];
-                randomActivity();
+            // 页面不可见时使用更安全的保活策略
+            if (!isPageVisible && this.config.enableBackgroundKeepAlive) {
+                this.simulateBackgroundActivity();
+            } else {
+                // 页面可见时的正常保活策略
+                if (this.config.riskLevel === 'low') {
+                    this.simulateScroll();
+                } else {
+                    const activities = [
+                        () => this.simulateScroll(),
+                        () => this.simulateMouseMove(),
+                        () => this.simulateFocus()
+                    ];
+
+                    const randomActivity = activities[Math.floor(Math.random() * activities.length)];
+                    randomActivity();
+                }
             }
 
             this.lastActivity = Date.now();
-            this.log('🔄 执行保活操作');
+            this.log(`🔄 执行保活操作 (${isPageVisible ? '前台' : '后台'}模式)`);
             this.updateStatusIndicator();
         }
 
@@ -194,12 +203,50 @@
             window.dispatchEvent(new Event('focus'));
         }
 
+        // 后台保活活动（更安全、更隐蔽）
+        simulateBackgroundActivity() {
+            // 使用最安全的方式：轻微修改localStorage来触发存储事件
+            try {
+                const timestamp = Date.now().toString();
+                localStorage.setItem('wechat-keepalive-heartbeat', timestamp);
+
+                // 立即清除，避免污染存储
+                setTimeout(() => {
+                    localStorage.removeItem('wechat-keepalive-heartbeat');
+                }, 100);
+            } catch (e) {
+                // 如果localStorage不可用，使用最小化的DOM操作
+                this.simulateMinimalScroll();
+            }
+        }
+
+        // 最小化滚动（用于后台模式的备选方案）
+        simulateMinimalScroll() {
+            const originalScrollY = window.scrollY;
+            // 使用极小的滚动距离
+            window.scrollBy(0, 0.1);
+
+            setTimeout(() => {
+                try {
+                    window.scrollTo({ top: originalScrollY, behavior: 'instant' });
+                } catch (e) {
+                    window.scrollTo(0, originalScrollY);
+                }
+            }, 50);
+        }
+
         // 判断是否应该模拟活动
         shouldSimulateActivity() {
             const timeSinceLastActivity = Date.now() - this.lastActivity;
-            const isPageVisible = !document.hidden;
             const hasBeenInactiveEnough = timeSinceLastActivity > this.getMinInactiveTime();
 
+            // 支持后台保活模式
+            if (this.config.enableBackgroundKeepAlive) {
+                return hasBeenInactiveEnough;
+            }
+
+            // 传统模式：仅在页面可见时保活
+            const isPageVisible = !document.hidden;
             return isPageVisible && hasBeenInactiveEnough;
         }
 
@@ -350,9 +397,11 @@
             const statusMessage = `微信会话保活状态：
 
 🟢 运行状态: ${this.isActive ? '活跃' : '待机'}
+📱 页面状态: ${document.hidden ? '后台运行' : '前台活跃'}
 ⏰ 最后活动: ${lastActivityTime}
 📊 距离上次活动: ${timeSinceLastActivity} 秒
 ⚙️ 风险等级: ${this.config.riskLevel}
+🌙 后台保活: ${this.config.enableBackgroundKeepAlive ? '已启用' : '已禁用'}
 🔌 WebSocket监控: ${this.config.enableWebSocketMonitor ? '已启用' : '已禁用'}
 🐛 调试模式: ${this.config.debugMode ? '已启用' : '已禁用'}
 
@@ -393,12 +442,12 @@
             const dialog = document.createElement('div');
             dialog.style.cssText = `
                 background: white;
-                border-radius: 16px;
-                padding: 32px;
-                box-shadow: 0 16px 64px rgba(0, 0, 0, 0.3);
-                max-width: 520px;
-                width: 90%;
-                max-height: 85vh;
+                border-radius: 12px;
+                padding: 20px;
+                box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+                max-width: 480px;
+                width: 88%;
+                max-height: 90vh;
                 overflow-y: auto;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                 color: #333;
@@ -416,90 +465,97 @@
             document.head.appendChild(style);
 
             dialog.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h3 style="margin: 0; color: #333; font-size: 24px; font-weight: 600;">🔄 会话保活设置</h3>
-                    <button id="closeBtn" style="background: none; border: none; font-size: 28px; cursor: pointer; color: #999; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s ease;">×</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0; color: #333; font-size: 20px; font-weight: 600;">🔄 会话保活设置</h3>
+                    <button id="closeBtn" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #999; padding: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s ease;">×</button>
                 </div>
 
-                <div style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 12px; border-left: 4px solid #07c160;">
-                    <h4 style="margin: 0 0 12px 0; color: #07c160; font-size: 16px; font-weight: 600;">💡 当前状态</h4>
-                    <div id="statusInfo" style="font-size: 14px; color: #666; line-height: 1.6;"></div>
+                <div style="margin-bottom: 16px; padding: 14px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 8px; border-left: 3px solid #07c160;">
+                    <h4 style="margin: 0 0 8px 0; color: #07c160; font-size: 14px; font-weight: 600;">💡 当前状态</h4>
+                    <div id="statusInfo" style="font-size: 12px; color: #666; line-height: 1.4;"></div>
                 </div>
 
-                <div style="margin-bottom: 24px;">
-                    <label style="display: block; margin-bottom: 12px; font-weight: 600; color: #333; font-size: 16px;">🛡️ 安全等级</label>
-                    <div style="display: grid; gap: 12px;">
-                        <label style="display: flex; align-items: center; padding: 16px; border: 2px solid #e5e7eb; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;" data-risk="low">
-                            <input type="radio" name="riskLevel" value="low" style="margin-right: 12px; transform: scale(1.2);">
-                            <div>
-                                <div style="font-weight: 600; color: #059669; margin-bottom: 4px;">🛡️ 低风险模式 (推荐)</div>
-                                <div style="font-size: 13px; color: #6b7280;">5分钟间隔，仅使用轻微滚动，最安全不易被检测</div>
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333; font-size: 14px;">🛡️ 安全等级</label>
+                    <div style="display: grid; gap: 8px;">
+                        <label style="display: flex; align-items: center; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;" data-risk="low">
+                            <input type="radio" name="riskLevel" value="low" style="margin-right: 10px; transform: scale(1.1);">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #059669; font-size: 13px; margin-bottom: 2px;">🛡️ 低风险模式 (推荐)</div>
+                                <div style="font-size: 11px; color: #6b7280; line-height: 1.3;">5分钟间隔，仅使用轻微滚动</div>
                             </div>
                         </label>
-                        <label style="display: flex; align-items: center; padding: 16px; border: 2px solid #e5e7eb; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;" data-risk="medium">
-                            <input type="radio" name="riskLevel" value="medium" style="margin-right: 12px; transform: scale(1.2);">
-                            <div>
-                                <div style="font-weight: 600; color: #d97706; margin-bottom: 4px;">⚖️ 中等风险模式</div>
-                                <div style="font-size: 13px; color: #6b7280;">2分钟间隔，包含鼠标移动，平衡安全性和效果</div>
+                        <label style="display: flex; align-items: center; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;" data-risk="medium">
+                            <input type="radio" name="riskLevel" value="medium" style="margin-right: 10px; transform: scale(1.1);">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #d97706; font-size: 13px; margin-bottom: 2px;">⚖️ 中等风险模式</div>
+                                <div style="font-size: 11px; color: #6b7280; line-height: 1.3;">2分钟间隔，包含鼠标移动</div>
                             </div>
                         </label>
-                        <label style="display: flex; align-items: center; padding: 16px; border: 2px solid #e5e7eb; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;" data-risk="high">
-                            <input type="radio" name="riskLevel" value="high" style="margin-right: 12px; transform: scale(1.2);">
-                            <div>
-                                <div style="font-weight: 600; color: #dc2626; margin-bottom: 4px;">⚠️ 高风险模式</div>
-                                <div style="font-size: 13px; color: #6b7280;">1分钟间隔，所有操作，效果最佳但检测风险高</div>
+                        <label style="display: flex; align-items: center; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;" data-risk="high">
+                            <input type="radio" name="riskLevel" value="high" style="margin-right: 10px; transform: scale(1.1);">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #dc2626; font-size: 13px; margin-bottom: 2px;">⚠️ 高风险模式</div>
+                                <div style="font-size: 11px; color: #6b7280; line-height: 1.3;">1分钟间隔，所有操作</div>
                             </div>
                         </label>
                     </div>
                 </div>
 
-                <div style="margin-bottom: 24px;">
-                    <label style="display: block; margin-bottom: 12px; font-weight: 600; color: #333; font-size: 16px;">⏱️ 活动间隔</label>
-                    <div style="display: flex; align-items: center; gap: 16px;">
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333; font-size: 14px;">⏱️ 活动间隔</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
                         <input type="range" id="activityInterval" min="60" max="600" step="30"
-                               style="flex: 1; height: 8px; border-radius: 4px; background: #e5e7eb; outline: none;">
-                        <div id="intervalValue" style="min-width: 80px; font-weight: 600; color: #07c160; text-align: center; padding: 8px 12px; background: #f0f9ff; border-radius: 8px; font-size: 14px;"></div>
+                               style="flex: 1; height: 6px; border-radius: 3px; background: #e5e7eb; outline: none;">
+                        <div id="intervalValue" style="min-width: 60px; font-weight: 600; color: #07c160; text-align: center; padding: 6px 10px; background: #f0f9ff; border-radius: 6px; font-size: 12px;"></div>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #9ca3af;">
+                    <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 10px; color: #9ca3af;">
                         <span>1分钟</span>
                         <span>10分钟</span>
                     </div>
                 </div>
 
-                <div style="margin-bottom: 24px;">
-                    <div style="display: grid; gap: 16px;">
-                        <label style="display: flex; align-items: center; padding: 16px; background: #f9fafb; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;" id="websocketLabel">
-                            <input type="checkbox" id="enableWebSocket" style="margin-right: 12px; transform: scale(1.3);">
-                            <div>
-                                <div style="font-weight: 600; color: #333; margin-bottom: 4px;">🔌 WebSocket连接监控</div>
-                                <div style="font-size: 13px; color: #6b7280;">自动检测连接断开并尝试恢复，推荐启用</div>
+                <div style="margin-bottom: 16px;">
+                    <div style="display: grid; gap: 8px;">
+                        <label style="display: flex; align-items: center; padding: 10px 12px; background: #f9fafb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;" id="backgroundLabel">
+                            <input type="checkbox" id="enableBackgroundKeepAlive" style="margin-right: 10px; transform: scale(1.2);">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #333; font-size: 13px; margin-bottom: 2px;">🌙 后台保活模式 (推荐)</div>
+                                <div style="font-size: 11px; color: #6b7280; line-height: 1.3;">页面切换到后台时继续保活</div>
                             </div>
                         </label>
-                        <label style="display: flex; align-items: center; padding: 16px; background: #f9fafb; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;" id="debugLabel">
-                            <input type="checkbox" id="debugMode" style="margin-right: 12px; transform: scale(1.3);">
-                            <div>
-                                <div style="font-weight: 600; color: #333; margin-bottom: 4px;">🐛 调试模式</div>
-                                <div style="font-size: 13px; color: #6b7280;">在浏览器控制台显示详细运行日志</div>
+                        <label style="display: flex; align-items: center; padding: 10px 12px; background: #f9fafb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;" id="websocketLabel">
+                            <input type="checkbox" id="enableWebSocket" style="margin-right: 10px; transform: scale(1.2);">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #333; font-size: 13px; margin-bottom: 2px;">🔌 WebSocket连接监控</div>
+                                <div style="font-size: 11px; color: #6b7280; line-height: 1.3;">自动检测连接断开并尝试恢复</div>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: center; padding: 10px 12px; background: #f9fafb; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;" id="debugLabel">
+                            <input type="checkbox" id="debugMode" style="margin-right: 10px; transform: scale(1.2);">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #333; font-size: 13px; margin-bottom: 2px;">🐛 调试模式</div>
+                                <div style="font-size: 11px; color: #6b7280; line-height: 1.3;">在浏览器控制台显示详细日志</div>
                             </div>
                         </label>
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 12px; justify-content: flex-end; margin-bottom: 16px;">
-                    <button id="resetBtn" style="padding: 12px 24px; border: 2px solid #e5e7eb; background: white; color: #374151; border-radius: 10px; cursor: pointer; font-weight: 600; transition: all 0.2s ease; font-size: 14px;">
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-bottom: 12px;">
+                    <button id="resetBtn" style="padding: 8px 16px; border: 2px solid #e5e7eb; background: white; color: #374151; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s ease; font-size: 12px;">
                         🔄 重置默认
                     </button>
-                    <button id="saveBtn" style="padding: 12px 24px; background: linear-gradient(135deg, #07c160 0%, #059669 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; box-shadow: 0 4px 12px rgba(7, 193, 96, 0.3); transition: all 0.2s ease; font-size: 14px;">
+                    <button id="saveBtn" style="padding: 8px 16px; background: linear-gradient(135deg, #07c160 0%, #059669 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; box-shadow: 0 3px 8px rgba(7, 193, 96, 0.3); transition: all 0.2s ease; font-size: 12px;">
                         💾 保存配置
                     </button>
                 </div>
 
-                <div style="padding: 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 12px; font-size: 13px; line-height: 1.5;">
-                    <div style="font-weight: 600; color: #d97706; margin-bottom: 8px;">⚠️ 重要提示</div>
+                <div style="padding: 12px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; font-size: 11px; line-height: 1.4;">
+                    <div style="font-weight: 600; color: #d97706; margin-bottom: 6px;">⚠️ 重要提示</div>
                     <div style="color: #92400e;">
-                        • 使用会话保活功能存在账号风险，建议使用低风险模式<br>
+                        • 使用保活功能存在账号风险，建议低风险模式<br>
                         • 避免24小时连续运行，适度使用更安全<br>
-                        • 如收到任何账号警告，请立即停止使用
+                        • 如收到任何警告，请立即停止使用
                     </div>
                 </div>
             `;
@@ -526,6 +582,7 @@
             if (statusInfo) {
                 statusInfo.innerHTML = `
                     <div style="margin-bottom: 8px;">🟢 运行状态: <strong>${status.isActive ? '活跃' : '待机'}</strong></div>
+                    <div style="margin-bottom: 8px;">📱 页面状态: <strong>${document.hidden ? '后台运行' : '前台活跃'}</strong></div>
                     <div style="margin-bottom: 8px;">⏰ 最后活动: <strong>${status.lastActivity.toLocaleTimeString()}</strong></div>
                     <div style="margin-bottom: 8px;">📊 距上次活动: <strong>${timeSinceLastActivity} 秒</strong></div>
                     <div>⚙️ 当前模式: <strong>${this.getRiskLevelText(this.config.riskLevel)}</strong></div>
@@ -553,8 +610,10 @@
             }
 
             // 设置复选框
+            const enableBackgroundKeepAlive = dialog.querySelector('#enableBackgroundKeepAlive');
             const enableWebSocket = dialog.querySelector('#enableWebSocket');
             const debugMode = dialog.querySelector('#debugMode');
+            if (enableBackgroundKeepAlive) enableBackgroundKeepAlive.checked = status.config.enableBackgroundKeepAlive;
             if (enableWebSocket) enableWebSocket.checked = status.config.enableWebSocketMonitor;
             if (debugMode) debugMode.checked = status.config.debugMode;
 
@@ -574,10 +633,20 @@
 
         // 更新复选框样式
         updateCheckboxStyles(dialog) {
+            const backgroundCheck = dialog.querySelector('#enableBackgroundKeepAlive');
             const websocketCheck = dialog.querySelector('#enableWebSocket');
             const debugCheck = dialog.querySelector('#debugMode');
+            const backgroundLabel = dialog.querySelector('#backgroundLabel');
             const websocketLabel = dialog.querySelector('#websocketLabel');
             const debugLabel = dialog.querySelector('#debugLabel');
+
+            if (backgroundCheck.checked) {
+                backgroundLabel.style.backgroundColor = '#f0f4ff';
+                backgroundLabel.style.borderLeft = '4px solid #6366f1';
+            } else {
+                backgroundLabel.style.backgroundColor = '#f9fafb';
+                backgroundLabel.style.borderLeft = 'none';
+            }
 
             if (websocketCheck.checked) {
                 websocketLabel.style.backgroundColor = '#f0f9ff';
@@ -663,8 +732,13 @@
             });
 
             // 复选框样式更新
+            const backgroundCheck = dialog.querySelector('#enableBackgroundKeepAlive');
             const websocketCheck = dialog.querySelector('#enableWebSocket');
             const debugCheck = dialog.querySelector('#debugMode');
+
+            backgroundCheck.addEventListener('change', function() {
+                self.updateCheckboxStyles(dialog);
+            });
 
             websocketCheck.addEventListener('change', function() {
                 self.updateCheckboxStyles(dialog);
@@ -681,6 +755,7 @@
                 dialog.querySelector('input[value="low"]').checked = true;
                 intervalSlider.value = 300;
                 intervalValue.textContent = '300秒';
+                backgroundCheck.checked = true;
                 websocketCheck.checked = true;
                 debugCheck.checked = false;
 
@@ -728,6 +803,7 @@
                 const newConfig = {
                     riskLevel: selectedRisk,
                     activityInterval: parseInt(intervalSlider.value) * 1000,
+                    enableBackgroundKeepAlive: backgroundCheck.checked,
                     enableWebSocketMonitor: websocketCheck.checked,
                     debugMode: debugCheck.checked
                 };
