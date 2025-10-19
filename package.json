@@ -1,20 +1,23 @@
 {
     "name": "wechat-need-web",
-    "version": "1.0.0",
+    "version": "1.1.1",
     "description": "Allow WeChat to access the webpage.",
     "main": "index.js",
     "scripts": {
-        "build": "ts-node ./src/index.ts"
+        "build": "npm run build:chrome && npm run build:firefox",
+        "build:chrome": "ts-node ./src/index.ts chrome",
+        "build:firefox": "ts-node ./src/index.ts firefox"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "sharp": "^0.32.1",
+        "@types/chrome": "^0.0.248",
+        "sharp": "^0.32.6",
         "ts-node": "^10.9.1",
-        "typescript": "^5.0.4",
-        "@types/chrome": "^0.0.234",
-        "@types/node": "^18.16.3"
+        "typescript": "^5.2.2"
     },
-    "devDependencies": {}
+    "devDependencies": {
+        "@types/node": "^22.13.4"
+    }
 }
