@@ -34,6 +34,16 @@
                 if (stored) {
                     this.config = { ...this.config, ...JSON.parse(stored) };
                 }
+
+                // 文件传输助手页面的特殊优化
+                if (window.location.hostname.includes('filehelper.weixin.qq.com')) {
+                    // 使用更保守的默认设置，避免干扰文件传输
+                    if (!stored) {
+                        this.config.riskLevel = 'low';
+                        this.config.enableBackgroundKeepAlive = true;
+                        this.config.activityInterval = 300000; // 5分钟
+                    }
+                }
             } catch (error) {
                 console.warn('[SessionKeeper] 加载配置失败:', error);
             }
@@ -50,7 +60,8 @@
 
         // 初始化
         init() {
-            this.log('🚀 微信会话保活已启动');
+            const pageType = window.location.hostname.includes('filehelper.weixin.qq.com') ? '文件传输助手' : '微信网页版';
+            this.log('🚀 微信会话保活已启动 (' + pageType + ')');
 
             // 延迟启动，确保页面稳定（特别是Firefox可能的重定向）
             setTimeout(() => {
@@ -174,6 +185,13 @@
 
         // 模拟滚动
         simulateScroll() {
+            // 文件传输助手页面可能没有足够的滚动空间，使用更安全的方式
+            if (window.location.hostname.includes('filehelper.weixin.qq.com')) {
+                // 使用最小化的操作，避免影响文件上传/下载
+                this.simulateBackgroundActivity();
+                return;
+            }
+
             const originalScrollY = window.scrollY;
             window.scrollBy(0, 1);
 
@@ -393,9 +411,11 @@
         showStatus() {
             const timeSinceLastActivity = Math.round((Date.now() - this.lastActivity) / 1000);
             const lastActivityTime = new Date(this.lastActivity).toLocaleTimeString();
+            const pageType = window.location.hostname.includes('filehelper.weixin.qq.com') ? '📁 文件传输助手' : '💬 微信网页版';
 
             const statusMessage = `微信会话保活状态：
 
+📌 页面类型: ${pageType}
 🟢 运行状态: ${this.isActive ? '活跃' : '待机'}
 📱 页面状态: ${document.hidden ? '后台运行' : '前台活跃'}
 ⏰ 最后活动: ${lastActivityTime}
@@ -464,11 +484,23 @@
             `;
             document.head.appendChild(style);
 
+            const isFileHelper = window.location.hostname.includes('filehelper.weixin.qq.com');
+            const fileHelperTip = isFileHelper ? `
+                <div style="margin-bottom: 16px; padding: 12px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 8px; border-left: 3px solid #3b82f6;">
+                    <h4 style="margin: 0 0 6px 0; color: #1e40af; font-size: 13px; font-weight: 600;">📁 文件传输助手模式</h4>
+                    <div style="font-size: 11px; color: #1e40af; line-height: 1.4;">
+                        已自动优化为文件传输场景，使用最安全的保活策略，不会干扰文件上传下载。
+                    </div>
+                </div>
+            ` : '';
+
             dialog.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h3 style="margin: 0; color: #333; font-size: 20px; font-weight: 600;">🔄 会话保活设置</h3>
                     <button id="closeBtn" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #999; padding: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s ease;">×</button>
                 </div>
+
+                ${fileHelperTip}
 
                 <div style="margin-bottom: 16px; padding: 14px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 8px; border-left: 3px solid #07c160;">
                     <h4 style="margin: 0 0 8px 0; color: #07c160; font-size: 14px; font-weight: 600;">💡 当前状态</h4>
@@ -900,12 +932,18 @@
             'web2.wechat.com',
             'wx.qq.com',
             'wx2.qq.com',
-            'wx8.qq.com'
+            'wx8.qq.com',
+            'filehelper.weixin.qq.com'
         ];
 
         return wechatDomains.some(function(domain) {
             return hostname.includes(domain);
         });
+    }
+
+    // 检查是否是文件传输助手页面
+    function isFileHelperPage() {
+        return window.location.hostname.includes('filehelper.weixin.qq.com');
     }
 
     // 只在微信页面运行，并防止重复初始化
@@ -915,7 +953,15 @@
         // 全局暴露，方便调试
         window.sessionKeeper = sessionKeeper;
 
-        console.log('🎉 微信会话保活插件已加载！');
+        const pageType = isFileHelperPage() ? '文件传输助手' : '微信网页版';
+        console.log('🎉 微信会话保活插件已加载！(' + pageType + ')');
+
+        if (isFileHelperPage()) {
+            console.log('📁 检测到文件传输助手页面，已启用特殊优化模式');
+            console.log('   - 使用最安全的保活策略');
+            console.log('   - 避免干扰文件上传/下载');
+        }
+
         console.log('💡 提示：输入 sessionKeeper.getStatus() 查看状态');
         console.log('💡 提示：输入 sessionKeeper.updateConfig({riskLevel: "medium"}) 修改配置');
     } else if (window.sessionKeeper) {
