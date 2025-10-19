@@ -43,15 +43,23 @@ export class Make {
 
         m.icons = await this.makeIcons();
 
+        // 为所有平台添加会话保活 content script
+        m.content_scripts = [
+            {
+                matches: [...WECHAT_URLS],
+                run_at: 'document_idle', // 页面加载完成后运行
+                js: ['session-keeper.js'],
+            },
+        ];
+
         if (this.platform === PLATFORM.firefox) {
             m.permissions!.push('scripting');
-            m.content_scripts = [
-                {
-                    matches: [...WECHAT_URLS],
-                    run_at: 'document_start',
-                    js: ['firefox.js'],
-                },
-            ];
+            // Firefox 还需要原有的 firefox.js
+            m.content_scripts.push({
+                matches: [...WECHAT_URLS],
+                run_at: 'document_start',
+                js: ['firefox.js'],
+            });
         }
 
         switch (this.platform) {
@@ -81,12 +89,10 @@ export class Make {
             id: -1,
             priority: 2,
             action: {
-                type: chrome.declarativeNetRequest.RuleActionType
-                    .MODIFY_HEADERS,
+                type: 'modifyHeaders' as chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
                 requestHeaders: Object.entries(WECHAT_HEADERS).map(
                     ([k, v]) => ({
-                        operation:
-                            chrome.declarativeNetRequest.HeaderOperation.SET,
+                        operation: 'set' as chrome.declarativeNetRequest.HeaderOperation.SET,
                         header: k,
                         value: v,
                     })
@@ -106,7 +112,7 @@ export class Make {
                 id: -1,
                 priority: 1,
                 action: {
-                    type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
+                    type: 'redirect' as chrome.declarativeNetRequest.RuleActionType.REDIRECT,
                     redirect: {
                         transform: {
                             queryTransform: {
@@ -155,11 +161,29 @@ export class Make {
     }
 
     copyStatic() {
+        // 复制平台特定的静态文件
         const src = path.join(__dirname, `./assets/static/${this.platform}`);
-        if (!fs.existsSync(src)) {
-            return;
+        if (fs.existsSync(src)) {
+            const dist = path.join(this.outDir, './');
+            fs.cpSync(src, dist, { recursive: true });
         }
-        const dist = path.join(this.outDir, './');
-        fs.cpSync(src, dist, { recursive: true });
+
+        // 复制会话保活脚本（编译后的JavaScript文件）
+        this.copySessionKeeper();
+    }
+
+    copySessionKeeper() {
+        // 复制会话保活脚本
+        const sessionScriptPath = path.join(__dirname, './assets/static/session-keeper.js');
+
+        if (fs.existsSync(sessionScriptPath)) {
+            const content = fs.readFileSync(sessionScriptPath, 'utf8');
+            const outputPath = path.join(this.outDir, 'session-keeper.js');
+            fs.writeFileSync(outputPath, content, 'utf8');
+
+            console.log(`✅ 会话保活脚本已复制到: ${outputPath}`);
+        } else {
+            console.log(`⚠️  会话保活脚本源文件不存在: ${sessionScriptPath}`);
+        }
     }
 }

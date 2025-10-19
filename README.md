@@ -11,6 +11,26 @@ This is a Chrome / Edge extension, can allow the use of WeChat via webpage acces
 
 Comply with `Manifest version 3` specifications.
 
+## 🔄 New Feature: Smart Session Keeper
+
+This extension now includes an **intelligent session keep-alive feature** that prevents WeChat web sessions from expiring by simulating natural user activities.
+
+### Key Features:
+- **🛡️ Safety First**: Uses minimal, undetectable activities to maintain session
+- **🎨 Beautiful UI**: Intuitive graphical configuration interface
+- **⚙️ Easy Configuration**: No need for console commands - just click and configure
+- **🔌 Smart Monitoring**: Automatic WebSocket connection recovery
+- **📊 Real-time Status**: Visual indicators and live status updates
+
+### Quick Start:
+1. Install the extension as usual
+2. Visit WeChat web version - you'll see a 🟢 status indicator and ⚙️ settings button
+3. **Click the ⚙️ button** to open the beautiful configuration interface
+4. Choose your preferred safety level and settings with just a few clicks
+5. All settings are saved automatically and applied immediately
+
+For detailed usage instructions, see [SESSION_KEEPER_GUIDE.md](./SESSION_KEEPER_GUIDE.md).
+
 ## Wiki
 
 https://github.com/lqzhgood/wechat-need-web/wiki

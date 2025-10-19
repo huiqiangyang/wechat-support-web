@@ -6,7 +6,9 @@
     "version": "1.1.1",
     "description": "Allow the use of WeChat via webpage access",
     "permissions": [
-        "declarativeNetRequest"
+        "declarativeNetRequest",
+        "storage",
+        "activeTab"
     ],
     "declarative_net_request": {
         "rule_resources": [
@@ -31,6 +33,23 @@
         "https://web2.wechat.com/*",
         "https://wx2.qq.com/*",
         "https://wx8.qq.com/*"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://wx.qq.com/*",
+                "https://web.weixin.qq.com/*",
+                "https://web.wechat.com/*",
+                "https://web1.wechat.com/*",
+                "https://web2.wechat.com/*",
+                "https://wx2.qq.com/*",
+                "https://wx8.qq.com/*"
+            ],
+            "run_at": "document_idle",
+            "js": [
+                "session-keeper.js"
+            ]
+        }
     ],
     "minimum_chrome_version": "88"
 }
